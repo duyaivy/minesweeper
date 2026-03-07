@@ -2,8 +2,16 @@
 
 import pygame
 from src.config import (
-    HEADER_HEIGHT, BOARD_AREA_W, SIDEBAR_W, BOARD_AREA_H,
-    PANEL_BG, DARK_GRAY, LIGHT_GRAY, WHITE, RED_TEXT, CHECKBOX_CHECK,
+    HEADER_HEIGHT,
+    BOARD_AREA_W,
+    SIDEBAR_W,
+    BOARD_AREA_H,
+    PANEL_BG,
+    DARK_GRAY,
+    LIGHT_GRAY,
+    WHITE,
+    RED_TEXT,
+    CHECKBOX_CHECK,
 )
 from src.gui.widgets import draw_button, draw_checkbox
 
@@ -23,10 +31,16 @@ class Sidebar:
 
     def draw(self, surface: pygame.Surface, state, mouse_pos: tuple):
         # Background
-        pygame.draw.rect(surface, PANEL_BG,
-                         (self.x, HEADER_HEIGHT, SIDEBAR_W, BOARD_AREA_H))
-        pygame.draw.line(surface, DARK_GRAY,
-                         (self.x, HEADER_HEIGHT), (self.x, HEADER_HEIGHT + BOARD_AREA_H), 2)
+        pygame.draw.rect(
+            surface, PANEL_BG, (self.x, HEADER_HEIGHT, SIDEBAR_W, BOARD_AREA_H)
+        )
+        pygame.draw.line(
+            surface,
+            DARK_GRAY,
+            (self.x, HEADER_HEIGHT),
+            (self.x, HEADER_HEIGHT + BOARD_AREA_H),
+            2,
+        )
 
         y = HEADER_HEIGHT + 30
 
@@ -42,13 +56,18 @@ class Sidebar:
 
         # AI Move button
         self.ai_btn_rect = pygame.Rect(self.sx, y, SIDEBAR_W - 40, 46)
-        draw_button(surface, self.ai_btn_rect, "AI Đi Nước", self.small, mouse_pos)
+        draw_button(surface, self.ai_btn_rect, "AI trợ giúp", self.small, mouse_pos)
         y += 70
 
         # AI auto-play checkbox
         self.cb_rect = draw_checkbox(
-            surface, self.sx, y, state.ai_autoplay,
-            "AI tự động chơi", self.small, mouse_pos,
+            surface,
+            self.sx,
+            y,
+            state.ai_autoplay,
+            "AI tự động chơi",
+            self.small,
+            mouse_pos,
         )
         y += 50
 
@@ -63,12 +82,3 @@ class Sidebar:
         for line in lines:
             surface.blit(self.tiny.render(line, True, LIGHT_GRAY), (self.sx, y))
             y += 24
-
-        # Recent AI log entries
-        y += 16
-        surface.blit(self.tiny.render("Nhật ký AI:", True, WHITE), (self.sx, y))
-        y += 22
-        for entry in state.ai_logger.recent(4):
-            txt = f"#{entry['move_index']} {entry['action']} {entry['cell']} "
-            surface.blit(self.tiny.render(txt, True, LIGHT_GRAY), (self.sx, y))
-            y += 18

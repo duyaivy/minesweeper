@@ -41,7 +41,7 @@ class App:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((WIN_W, WIN_H))
-        pygame.display.set_caption("Dò Mìn - AI Nâng Cao")
+        pygame.display.set_caption("Minesweeper AI")
         self.clock = pygame.time.Clock()
 
         self.fonts = {
@@ -171,9 +171,12 @@ class App:
                 logger.log(mode, "reveal", move, f"{reason} - hit mine", status_str())
                 self._stop_autoplay()
             else:
-                nearby = game.nearby_mines(move)
-                s.revealed.add(move)
-                ai.add_knowledge(move, nearby)
+                # BFS flood-fill: mở toàn vùng 0 nếu cần
+                newly_opened = game.reveal_flood_fill(move, s.revealed, s.flags)
+                # Cập nhật AI knowledge cho tất cả ô mới mở
+                for opened_cell in newly_opened:
+                    count = game.nearby_mines(opened_cell)
+                    ai.add_knowledge(opened_cell, count)
                 action = "reveal" if source == "rule" else "guess"
                 logger.log(mode, action, move, reason, status_str())
         else:
@@ -224,23 +227,24 @@ class App:
 
     def _draw_instructions(self, mouse_pos):
         f = self.fonts
-        title = f["large"].render("Chơi Dò Mìn", True, WHITE)
+        title = f["large"].render("Minesweeper AI", True, WHITE)
         self.screen.blit(title, title.get_rect(center=(WIN_W // 2, 120)))
 
         rules = [
-            "Nhấp chuột để mở ô.",
+            "Nhấp chuột để mở tất cả các ô an toàn không có mìn",
+            "Khi bấm vào một ô không có mìn → ô sẽ hiện ra một con số.",
+            "Con số trên ô cho biết có bao nhiêu quả mìn nằm trong 8 ô xung quanh ô đó.",
             "Nhấp chuột phải để đánh dấu mìn.",
             "Đánh dấu tất cả mìn để chiến thắng!",
             "",
-            "Dùng ô chọn AI để máy tự động chơi,",
-            "hoặc nhận gợi ý khi chơi thủ công.",
+            "Chơi thủ công hoặc nhờ AI gợi ý từng bước.",
         ]
         for i, rule in enumerate(rules):
             line = f["small"].render(rule, True, LIGHT_GRAY)
             self.screen.blit(line, line.get_rect(center=(WIN_W // 2, 220 + 32 * i)))
 
         btn = pygame.Rect(WIN_W // 2 - 120, WIN_H - 160, 240, 56)
-        draw_button(self.screen, btn, "Bắt Đầu Chơi", f["medium"], mouse_pos)
+        draw_button(self.screen, btn, "Bắt Đầu", f["medium"], mouse_pos)
 
         click, _, _ = pygame.mouse.get_pressed()
         if click == 1 and btn.collidepoint(mouse_pos):
@@ -313,9 +317,14 @@ class App:
                         # Game already lost, status logged in check_mine_hit
                         pass
                     else:
-                        nearby = s.game.nearby_mines(cell)
-                        s.revealed.add(cell)
-                        s.ai.add_knowledge(cell, nearby)
+                        # BFS flood-fill: mở toàn vùng 0 nếu cần
+                        newly_opened = s.game.reveal_flood_fill(
+                            cell, s.revealed, s.flags
+                        )
+                        # Cập nhật AI knowledge cho tất cả ô mới mở
+                        for opened_cell in newly_opened:
+                            count = s.game.nearby_mines(opened_cell)
+                            s.ai.add_knowledge(opened_cell, count)
                         # Check win after reveal
                         evaluate_game_status(s, "reveal", cell)
                     time.sleep(CLICK_DELAY)

@@ -1,6 +1,7 @@
 """Minesweeper board data model — mine placement and neighbor counting."""
 
 import random
+from collections import deque
 
 
 class Minesweeper:
@@ -48,3 +49,34 @@ class Minesweeper:
 
     def won(self):
         return self.mines_found == self.mines
+
+    def reveal_flood_fill(self, start_cell, revealed: set, flags: set):
+        if self.nearby_mines(start_cell) != 0:
+            if start_cell not in revealed and start_cell not in flags:
+                revealed.add(start_cell)
+                return {start_cell}
+            return set()
+        newly_opened = set()
+        queue = deque([start_cell])
+        visited = {start_cell}
+        while queue:
+            cell = queue.popleft()
+            if cell in revealed or cell in flags:
+                continue
+            # Mo o hien tai
+            revealed.add(cell)
+            newly_opened.add(cell)
+            count = self.nearby_mines(cell)
+            if count > 0:
+                continue
+            for i in range(cell[0] - 1, cell[0] + 2):
+                for j in range(cell[1] - 1, cell[1] + 2):
+                    neighbor = (i, j)
+                    if neighbor == cell:
+                        continue
+                    if 0 <= i < self.height and 0 <= j < self.width:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+
+        return newly_opened
