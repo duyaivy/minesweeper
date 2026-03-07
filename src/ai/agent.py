@@ -44,48 +44,94 @@ class MinesweeperAI:
         return cells
 
     def add_knowledge(self, cell, count):
-        """Record that *cell* has *count* neighboring mines, then infer."""
+        """
+        Record that *cell* has *count* neighboring mines, then infer.
+
+        Uses iterative inference: loop until no new mines/safes are discovered.
+        This maximizes logical deduction and minimizes random guesses.
+        """
         self.moves_made.add(cell)
 
         if cell not in self.safes:
             self.mark_safe(cell)
 
+        # Tạo sentence mới từ các ô láng giềng chưa biết
         nearby = self.nearby_cells(cell)
         nearby -= self.safes | self.moves_made
         new_sentence = Sentence(nearby, count)
-        self.knowledge.append(new_sentence)
 
-        new_safes = set()
-        new_mines = set()
-        for sentence in self.knowledge:
-            if len(sentence.cells) == 0:
-                self.knowledge.remove(sentence)
-            else:
+        # Loại bỏ known mines khỏi sentence mới
+        for mine in self.mines:
+            if mine in new_sentence.cells:
+                new_sentence.cells.discard(mine)
+                new_sentence.count -= 1
+
+        # Only add non-empty sentences
+        if len(new_sentence.cells) > 0 or new_sentence.count > 0:
+            self.knowledge.append(new_sentence)
+
+        # ITERATIVE INFERENCE: lặp cho đến khi không còn suy luận mới
+        max_iterations = 100  # Safety limit
+        iteration = 0
+        changed = True
+
+        while changed and iteration < max_iterations:
+            changed = False
+            iteration += 1
+
+            # 1) Cleanup: Xóa sentences rỗng
+            self.knowledge = [s for s in self.knowledge if len(s.cells) > 0]
+
+            # 2) Direct inference: Check known_mines và known_safes
+            new_safes = set()
+            new_mines = set()
+
+            for sentence in self.knowledge:
                 tmp_safes = sentence.known_safes()
                 tmp_mines = sentence.known_mines()
-                if isinstance(tmp_safes, set):
+
+                if tmp_safes:
                     new_safes |= tmp_safes
-                if isinstance(tmp_mines, set):
+                if tmp_mines:
                     new_mines |= tmp_mines
 
-        for safe in new_safes:
-            self.mark_safe(safe)
-        for mine in new_mines:
-            self.mark_mine(mine)
+            # Mark tất cả safes mới phát hiện
+            for safe in new_safes:
+                if safe not in self.safes:
+                    self.mark_safe(safe)
+                    changed = True
 
-        prev = new_sentence
-        new_inferences = []
-        for sentence in self.knowledge:
-            if len(sentence.cells) == 0:
-                self.knowledge.remove(sentence)
-            elif prev == sentence:
-                break
-            elif prev.cells <= sentence.cells:
-                inf_cells = sentence.cells - prev.cells
-                inf_count = sentence.count - prev.count
-                new_inferences.append(Sentence(inf_cells, inf_count))
-            prev = sentence
-        self.knowledge += new_inferences
+            # Mark tất cả mines mới phát hiện
+            for mine in new_mines:
+                if mine not in self.mines:
+                    self.mark_mine(mine)
+                    changed = True
+
+            # 3) Subset inference: Kiểm tra tất cả cặp sentences
+            new_inferences = []
+            for s1 in self.knowledge:
+                for s2 in self.knowledge:
+                    if s1 == s2:
+                        continue
+
+                    # Nếu s1 là tập con của s2
+                    if s1.cells and s2.cells and s1.cells <= s2.cells:
+                        # s2 - s1 = difference
+                        inf_cells = s2.cells - s1.cells
+                        inf_count = s2.count - s1.count
+
+                        if inf_cells:  # Only create non-empty inferences
+                            inference = Sentence(inf_cells, inf_count)
+                            # Kiểm tra xem inference đã tồn tại chưa
+                            if (
+                                inference not in self.knowledge
+                                and inference not in new_inferences
+                            ):
+                                new_inferences.append(inference)
+                                changed = True
+
+            # Thêm các inferences mới vào knowledge base
+            self.knowledge.extend(new_inferences)
 
     def make_safe_move(self):
         """Return a known-safe cell not yet revealed, or None."""

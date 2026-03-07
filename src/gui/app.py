@@ -18,6 +18,7 @@ from src.config import (
     BTN_HOVER,
     BTN_TEXT,
     AI_TICK_MS,
+    AI_MAX_MOVES_PER_TURN,
     CLICK_DELAY,
     FONT_PATH,
     HEIGHT,
@@ -119,72 +120,108 @@ class App:
     # ------------------------------------------------------------------
 
     def _ai_step(self, mode: str = "autoplay"):
-        """Execute one AI action: flag, reveal, or guess."""
+        """
+        Execute AI actions: flag known mines, then reveal safe moves.
+
+        Cân bằng giữa logic và UX:
+        - Autoplay: Reveal 2-3 safe moves/turn (vừa đủ để inference, không quá nhanh)
+        - Hint: Reveal 1 move (gợi ý cho người chơi)
+        """
         s = self.state
         ai = s.ai
         game = s.game
         logger = s.ai_logger
         status_str = lambda: "lose" if s.lost else ("win" if s.won else "playing")
 
-        # 1) Flag known mines
+        # 1) Flag ALL known mines
         to_flag = ai.mines - s.flags
         if to_flag:
             for m in to_flag:
                 s.flags.add(m)
                 logger.log(mode, "flag", m, "known mine from KB", status_str())
 
-        # 2) Try safe move (rule-based)
-        move = ai.make_safe_move()
-        reason = "safe move"
-        source = "rule"
+        # 2) Reveal safe moves (số lượng vừa phải để cân bằng logic vs UX)
+        revealed_count = 0
+        max_safe_reveals = AI_MAX_MOVES_PER_TURN if mode == "autoplay" else 1
 
-        # 3) If no safe move, use ML predictor (or random if ML not ready)
-        if move is None:
-            move = ai.make_random_move()
-            if s.ml_ready:
-                # Log ML usage with probability
-                prob = getattr(ai, "_last_ml_prob", None)
-                if prob is not None:
-                    remaining = len(
-                        [
-                            c
-                            for c in [
-                                (r, c)
-                                for r in range(ai.height)
-                                for c in range(ai.width)
-                            ]
-                            if c not in ai.moves_made and c not in ai.mines
+        while revealed_count < max_safe_reveals:
+            move = ai.make_safe_move()
+            if move is None:
+                break  # Không còn safe moves
+
+            # Reveal safe move
+            if game.is_mine(move):
+                # Không nên xảy ra (safe move không thể là mine)
+                log.error(f"BUG: Safe move {move} is actually a mine!")
+                s.lost = True
+                logger.log(mode, "reveal", move, "safe move - ERROR", status_str())
+                self._stop_autoplay()
+                return
+
+            # BFS flood-fill: mở toàn vùng 0 nếu cần
+            newly_opened = game.reveal_flood_fill(move, s.revealed, s.flags)
+            # Cập nhật AI knowledge cho tất cả ô mới mở
+            for opened_cell in newly_opened:
+                count = game.nearby_mines(opened_cell)
+                ai.add_knowledge(opened_cell, count)
+
+            logger.log(mode, "reveal", move, "safe move from KB", status_str())
+            revealed_count += 1
+
+            # Check win condition
+            if evaluate_game_status(s, "ai_step", move) != "playing":
+                if s.won:
+                    logger.log(mode, "none", None, "game won!", "win")
+                self._stop_autoplay()
+                return
+
+        # 3) Nếu đã reveal ít nhất 1 safe move → không guess trong lượt này
+        # Vì reveal có thể tạo ra knowledge mới → có thể có safe moves mới ở lượt sau
+        if revealed_count > 0:
+            return
+
+        # 4) Không còn safe moves → Phải guess (ML/random)
+        move = ai.make_random_move()
+        if s.ml_ready:
+            prob = getattr(ai, "_last_ml_prob", None)
+            if prob is not None:
+                remaining = len(
+                    [
+                        c
+                        for c in [
+                            (r, c) for r in range(ai.height) for c in range(ai.width)
                         ]
-                    )
-                    log.info(
-                        f"Using ML: {remaining} cells left, chose {move} P(mine)={prob:.3f}"
-                    )
-                reason = "AI guess"
-                source = "ml"
-            else:
-                reason = "random guess"
-                source = "random"
+                        if c not in ai.moves_made and c not in ai.mines
+                    ]
+                )
+                log.info(
+                    f"Using ML: {remaining} cells left, chose {move} P(mine)={prob:.3f}"
+                )
+            reason = "ML guess"
+            source = "ml"
+        else:
+            reason = "random guess"
+            source = "random"
 
         if move is not None:
             if game.is_mine(move):
                 s.lost = True
-                logger.log(mode, "reveal", move, f"{reason} - hit mine", status_str())
+                logger.log(mode, "guess", move, f"{reason} - hit mine", status_str())
                 self._stop_autoplay()
             else:
-                # BFS flood-fill: mở toàn vùng 0 nếu cần
+                # BFS flood-fill
                 newly_opened = game.reveal_flood_fill(move, s.revealed, s.flags)
-                # Cập nhật AI knowledge cho tất cả ô mới mở
                 for opened_cell in newly_opened:
                     count = game.nearby_mines(opened_cell)
                     ai.add_knowledge(opened_cell, count)
-                action = "reveal" if source == "rule" else "guess"
-                logger.log(mode, action, move, reason, status_str())
+                logger.log(mode, "guess", move, reason, status_str())
         else:
+            # Không còn moves nào
             s.flags = ai.mines.copy()
             logger.log(mode, "none", None, "no moves left", status_str())
             self._stop_autoplay()
 
-        # Evaluate game status after AI move
+        # Evaluate game status after move
         evaluate_game_status(s, "ai_step", move)
         if s.won:
             logger.log(mode, "none", None, "game won!", "win")

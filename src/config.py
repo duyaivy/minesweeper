@@ -33,6 +33,7 @@ BOARD_ORIGIN_Y = HEADER_HEIGHT + (BOARD_AREA_H - BOARD_PIXEL_H) // 2
 
 # AI timing
 AI_TICK_MS = 300
+AI_MAX_MOVES_PER_TURN = 1  # Số moves tối đa mỗi lượt autoplay (cân bằng logic vs UX)
 CLICK_DELAY = 0.18
 
 # Colors
