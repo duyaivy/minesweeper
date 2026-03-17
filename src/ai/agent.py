@@ -141,16 +141,6 @@ class MinesweeperAI:
     def make_random_move(self):
         """
         Return a move for the 'must guess' situation.
-        - If MLPredictor available → dùng ML.
-        - Fallback → random.
-
-        Fix 1: revealed truyền vào ML = moves_made ONLY
-                (không gộp safes — safes là ô AI biết an toàn nhưng chưa lật,
-                 ML sẽ bị nhầm tưởng ô đó đã có số hiển thị)
-
-        Fix 2: ưu tiên border candidates (ô kề vùng đã lật)
-                → ML có đủ context số xung quanh để dự đoán chính xác
-                → tránh tình huống 63 candidates mà phần lớn cô lập
         """
         total = self.height * self.width
         if len(self.moves_made) >= total - len(self.mines):
@@ -166,7 +156,6 @@ class MinesweeperAI:
         if not all_candidates:
             return None
 
-        # Fix 2: border = ô chưa lật kề ít nhất 1 ô đã thực sự lật
         border_candidates = [
             cell
             for cell in all_candidates
@@ -175,15 +164,12 @@ class MinesweeperAI:
         candidates = border_candidates if border_candidates else all_candidates
 
         if self.ml_predictor is not None and self.ml_predictor.trained:
-            # Use ML predictor for best guess
             cell, prob = self.ml_predictor.predict_safest(
                 self._board_ref, self.moves_made, candidates, self.mines
             )
-            # Store prob for logging
             self._last_ml_prob = prob
             return cell
 
-        # Fallback: chọn random nếu không có AI
         self._last_ml_prob = None
         if not candidates:
             return None

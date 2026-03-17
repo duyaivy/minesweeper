@@ -41,13 +41,16 @@ class GameState:
     def set_ml_predictor(cls, predictor):
         """Called once from main() after ML training completes."""
         cls._ml_predictor = predictor
-        log.info("[STATE] MLPredictor attached (val_acc=%.4f)",
-                 predictor.val_accuracy)
+        if predictor is not None:
+            log.info(
+                "[STATE] MLPredictor attached (val_acc=%.4f)", predictor.val_accuracy
+            )
+        else:
+            log.info("[STATE] MLPredictor disabled - using random fallback")
 
     @property
     def ml_ready(self) -> bool:
-        return (GameState._ml_predictor is not None and
-                GameState._ml_predictor.trained)
+        return GameState._ml_predictor is not None and GameState._ml_predictor.trained
 
     @property
     def ml_accuracy(self) -> float:

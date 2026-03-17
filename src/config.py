@@ -3,8 +3,8 @@
 import os
 
 # Grid
-HEIGHT = 15
-WIDTH = 15
+HEIGHT = 16
+WIDTH = 16
 MINES = 40
 
 # Window
